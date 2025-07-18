@@ -1,89 +1,83 @@
-# deploy:
-#      mode: replicated
-#      replicas: 6
-
 services:
-  tor1:
-    image: dockurr/tor
-    container_name: tor3
-    volumes:
-      - ./tor/config3:/etc/tor
-      - ./tor/data/tor3:/var/lib/tor
-    restart: always
-    networks:
-      - proxy_net
-
-  tor2:
-    image: dockurr/tor
-    container_name: tor2
-    volumes:
-      - ./tor/config2:/etc/tor
-      - ./tor/data/tor2:/var/lib/tor
-    restart: always
-    networks:
-      - proxy_net
-
-  tor3:
-    image: dockurr/tor
-    container_name: tor1
-    volumes:
-      - ./tor/config1:/etc/tor
-      - ./tor/data/tor1:/var/lib/tor
-    restart: always
-    networks:
-      - proxy_net
-
-  privoxy1:
-    image: lusky3/privoxy:latest
-    container_name: privoxy1
-    volumes:
-      - ./privoxy/config1:/etc/privoxy/config
-    depends_on:
-      - tor1
+  # ProtonVPN tunnel
+  protonvpn:
+    image: genericmale/protonvpn
     restart: unless-stopped
-    networks:
-      - proxy_net
-
-  privoxy2:
-    image: lusky3/privoxy:latest
-    container_name: privoxy2
+    environment:
+      - OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
+      - VPN_RECONNECT=2:00
+      - VPN_SERVER_COUNT=10
+    devices:
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    secrets:
+      - protonvpn
     volumes:
-      - ./privoxy/config2:/etc/privoxy/config
-    depends_on:
-      - tor2
+      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://protonvpn.com"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Final out-proxy through ProtonVPN
+  privoxy_out:
+    image: vimagick/privoxy
     restart: unless-stopped
+    network_mode: service:protonvpn
+    depends_on:
+      protonvpn:
+        condition: service_healthy
+
+  # Replicated Tor nodes
+  tor:
+    image: dperson/torproxy:armhf
+    deploy:
+      mode: replicated
+      replicas: 3
     networks:
       - proxy_net
-
-  privoxy3:
-    image: lusky3/privoxy:latest
-    container_name: privoxy3
+    environment:
+      - SOCKS_PORT=9100
+      - CONTROL_PORT=9200
     volumes:
-      - ./privoxy/config3:/etc/privoxy/config
-    depends_on:
-      - tor3
-    restart: unless-stopped
+      - tor-data:/var/lib/tor
+      - ./torrc.template:/etc/tor/torrc:ro
+
+  # Replicated Privoxy for Tor → Privoxy routing
+  privoxy:
+    image: lusky3/privoxy:latest
+    deploy:
+      mode: replicated
+      replicas: 3
     networks:
       - proxy_net
+    depends_on:
+      - tor
+    volumes:
+      - ./privoxy/config:/etc/privoxy/config
 
+  # NGINX for load balancing the replicated Privoxy
   nginx:
     image: nginx:alpine
-    container_name: nginx_privoxy_lb
+    restart: always
+    ports:
+      - "8888:8888"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-    ports:
-      - "8889:8888"
     depends_on:
-      - privoxy1
-      - privoxy2
-      - privoxy3
-    restart: always
+      - privoxy
     networks:
       - proxy_net
 
+secrets:
+  protonvpn:
+    file: ./secrets/protonvpn
 
 volumes:
-  obfs4-data:
+  tor-data:
 
 networks:
   proxy_net:
+    driver: bridge

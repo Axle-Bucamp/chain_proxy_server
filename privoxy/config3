@@ -1,4 +1,0 @@
-# privoxy.d/config1
-listen-address  127.0.0.1:8113
-forward-socks5t / tor3:9103 .
-

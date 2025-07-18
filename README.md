@@ -1,194 +1,148 @@
-# Tor + Privoxy + NGINX Load-Balancing Proxy
+# 🛡️ Multi-hop Anonymity Proxy Chain: Tor + Privoxy + ProtonVPN + NGINX
 
-This project sets up a **rotating HTTP proxy** endpoint using multiple [Tor](https://www.torproject.org/) circuits, [Privoxy](https://www.privoxy.org/), and a unified [NGINX](https://nginx.org/) load-balanced interface.
+This project provides a secure, containerized anonymity pipeline using:
 
-> 🔐 Supports IP-leak prevention and Zero Trust secure tunneling options.
+- 🔄 **Tor cluster** (replicated, containerized, pluggable obfs4 bridges supported)
+- 🧰 **Privoxy** (per-Tor exit)
+- 🌐 **NGINX stream proxy** (to chain Tor→Privoxy→ProtonVPN)
+- 🛡️ **ProtonVPN outproxy** via tunnel-based Privoxy
+- 📈 Optional: Prometheus, Grafana, Watchtower
 
 ---
 
-## 🧩 Architecture
+## 📦 Architecture
 
 ```
 
-\[Your App or System Proxy]
-|
-v
-\[NGINX TCP Load Balancer :8888]
-|
-v
-\[Privoxy @ 8111-8113] --> \[Tor @ 9051-9053]
+\[User] → \[NGINX Proxy] → \[Tor Cluster] → \[Privoxy Cluster] → \[Privoxy (ProtonVPN)] → \[Internet]
 
+````
+
+All services run through `docker-compose`, replicating Tor + Privoxy nodes and chaining ProtonVPN as a secured egress tunnel.
+
+---
+
+## 🚀 Setup Instructions
+
+### 1. Clone the Repo
+
+```bash
+git clone https://github.com/Axle-Bucamp/chain_proxy_server
+cd chain_proxy_server
 ````
 
 ---
 
-## 🛠️ Installation & Setup
+### 2. Prepare Your `.env` File
 
-### 📦 Install dependencies
+Create a `.env` file in the root folder:
 
-```bash
-sudo apt update
-sudo apt install tor privoxy nginx-full
-````
+```env
+EMAIL=you@example.com
+OR_PORT=9001
+PT_PORT=9002
+NICKNAME=BridgeObfs4Node
+
+GF_SECURITY_ADMIN_USER=admin
+GF_SECURITY_ADMIN_PASSWORD=changeme
+
+WATCHTOWER_CLEANUP=true
+WATCHTOWER_LABEL_ENABLE=true
+```
+
+> ProtonVPN credentials must also be created as a Docker secret named `protonvpn`.
 
 ---
 
-### 📁 File Placement
-
-#### 1. **Privoxy configs**
-
-Place each custom Privoxy config file in:
+### 3. Run the System
 
 ```bash
-sudo mkdir -p /etc/privoxy/privoxy.d/
-sudo cp pivoxy.d/config1 /etc/privoxy/privoxy.d/config1
-sudo cp ppivoxy.d/config2 /etc/privoxy/privoxy.d/config2
-sudo cp pivoxy.d/config3 /etc/privoxy/privoxy.d/config3
+docker compose up -d --scale tor=3 --scale privoxy=3
 ```
 
-🔧 Edit each to forward to the correct Tor SOCKS port:
+This runs:
 
-* `config1` → `forward-socks5t / 127.0.0.1:9051 .`
-* `config2` → `forward-socks5t / 127.0.0.1:9052 .`
-* `config3` → `forward-socks5t / 127.0.0.1:9053 .`
-
-#### 2. **NGINX config**
-
-Place the stream configuration in `/etc/nginx`:
-
-```bash
-sudo cp nginx.conf.example /etc/nginx/privoxy_stream.conf
-```
-
-Open your main config and include it at top level:
-
-```bash
-sudo nano /etc/nginx/nginx.conf
-```
-
-Add this line **outside of `http {}`**:
-
-```nginx
-include /etc/nginx/privoxy_stream.conf;
-```
+* 3x Tor nodes (`dockurr/tor`)
+* 3x Privoxy nodes (each mapped to a Tor exit)
+* 1x ProtonVPN tunnel (`genericmale/protonvpn`)
+* 1x final Privoxy egress via VPN
+* 1x NGINX stream proxy chaining everything
 
 ---
 
-## ▶️ Running the Services
+### 4. Test Your Connection
 
-### 🧯 Start multiple Tor instances (with separate SOCKSPorts)
+Test that your IP is **not leaking**:
 
-Add this to your `/etc/tor/torrc`:
-
-```ini
-SocksPort 9051
-SocksPort 9052
-SocksPort 9053
-```
-
-Then restart Tor:
+* 🔎 [https://whatismyipaddress.com/](https://whatismyipaddress.com/)
+* 🧪 [https://dnsleaktest.com/](https://dnsleaktest.com/)
+* 🔐 [https://privacy.net/analyzer/](https://privacy.net/analyzer/)
 
 ```bash
-sudo systemctl restart tor
+curl --proxy http://localhost:8888 https://api.ipify.org
 ```
+
+✅ This should return your ProtonVPN IP — not your ISP or Tor IP.
 
 ---
 
-### 🚀 Start Privoxy Instances
+## 🔐 Enhanced Security Tips
 
-Run each instance manually:
-
-```bash
-sudo privoxy --daemon /etc/privoxy/privoxy.d/config1
-sudo privoxy --daemon /etc/privoxy/privoxy.d/config2
-sudo privoxy --daemon /etc/privoxy/privoxy.d/config3
-```
-
-You can also create `systemd` units if you want them to run persistently (ask if you need help with this).
+* **IP Leak Prevention**: Always run this with `--network host` or DNS-secured Docker bridge
+* **Zero Trust Tunnel**: ProtonVPN adds exit encryption after multiple Tor circuits
+* **Obfs4 Support**: Deploy obfs4-bridge to bypass censorship
+* **DNS Hardened**: Internal DNS disabled; relies on Tor-resolved or VPN-secured
 
 ---
 
-### 🔁 Start NGINX TCP Load Balancer
+## 📊 Optional Observability Stack
 
-Test and reload:
+You can optionally enable:
+
+* [Prometheus](https://prometheus.io/)
+* [Grafana](https://grafana.com/)
+* [Watchtower](https://github.com/containrrr/watchtower)
+
+These services monitor uptime, restarts, and connectivity across your chain.
+
+---
+
+## 📁 Directory Layout
 
 ```bash
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-Make sure port 8888 is listening:
-
-```bash
-ss -tulnp | grep 8888
+.
+├── docker-compose.yml
+├── nginx/
+│   └── nginx.conf
+├── privoxy/
+│   ├── config1
+│   ├── config2
+│   └── config3
+├── torrc.d/
+│   ├── tor1.conf
+│   ├── tor2.conf
+│   └── tor3.conf
+├── .env
+└── README.md
 ```
 
 ---
 
-## 🧪 Test
+## ✅ Status
 
-```bash
-curl --proxy http://127.0.0.1:8888 https://icanhazip.com
-```
-
-Repeat to observe exit IP rotation via Tor circuits.
-
----
-
-## 🛡 IP Leak Prevention
-
-1. Export proxy variables for CLI tools:
-
-```bash
-export http_proxy=http://127.0.0.1:8888
-export https_proxy=http://127.0.0.1:8888
-```
-
-2. Drop all non-Tor outbound traffic with `iptables` (optional):
-
-```bash
-sudo iptables -A OUTPUT -p tcp --dport 80 -m owner ! --uid-owner privoxy -j DROP
-sudo iptables -A OUTPUT -p tcp --dport 443 -m owner ! --uid-owner privoxy -j DROP
-```
-
-3. Use `dns=none` or disable local DNS in apps to avoid leaks.
+* [x] Tor replication
+* [x] Privoxy routing per Tor node
+* [x] NGINX chaining
+* [x] Final ProtonVPN tunnel
+* [x] Leak tested
 
 ---
 
-## 🔐 Optional: Zero Trust Tunnel
+### ✨ Credits
 
-To securely expose your proxy over the internet:
-
-* Use [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/) or [Tailscale Funnel](https://tailscale.com/funnel)
-* Protect access with:
-
-  * Basic Auth / Client certs
-  * IP allowlists
-  * ACLs or device rules
-
-This makes your proxy **Zero Trust** compatible — perfect for remote access, censorship circumvention, or bot automation.
-
----
-
-## 📁 Included Files
-
-* `nginx.conf.example`: NGINX stream config with TCP load balancing
-* `privoxy_config_example`: Base Privoxy config template
-* `test_random_proxy.sh`: Shell script to test random proxy manually
-* `README.md`: This documentation
-
----
-
-## ✅ Next Ideas
-
-* [ ] Add systemd services for Privoxy instances
-* [ ] Dockerize the full stack
-* [ ] Log Tor exit IPs per request
-* [ ] Support SOCKS5 proxy output via chained Tor
-
----
-
-## 📜 License
-
-MIT — Use freely, anonymize responsibly. Be ethical.
+* [Dockurr Tor](https://hub.docker.com/r/dockurr/tor)
+* [Privoxy](https://www.privoxy.org/)
+* [ProtonVPN Docker](https://hub.docker.com/r/genericmale/protonvpn)
+* [The Tor Project](https://www.torproject.org/)
+* [Grafana Labs](https://grafana.com/)
 

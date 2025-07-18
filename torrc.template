@@ -1,0 +1,5 @@
+SocksPort ${SOCKS_PORT}
+ControlPort ${CONTROL_PORT}
+DataDirectory /var/lib/tor
+Log notice file /var/log/tor.log
+RunAsDaemon 0

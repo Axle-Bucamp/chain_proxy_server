@@ -1,4 +1,0 @@
-TorAddress 127.0.0.1
-TorPort __PORT__
-AllowInbound 1
-TorDNS 1
