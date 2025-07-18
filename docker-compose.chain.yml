@@ -1,0 +1,94 @@
+version: "3.8"
+
+services:
+  proxychain:
+    image: dockette/proxychain
+    container_name: proxychain
+    ports:
+      - "8899:8000"
+    environment:
+      PROXY_PROXYLIST: "privoxy1:8118,privoxy2:8118,protonvpn:3128"
+      PROXY_VERBOSE: "true"
+    depends_on:
+      - privoxy1
+      - privoxy2
+      - protonvpn
+    networks:
+      - proxy_net_chain
+    restart: unless-stopped
+
+  # Replicated Tor nodes
+  tor1:
+    image: dperson/torproxy
+    container_name: tor1
+    networks:
+      - proxy_net_chain
+    restart: unless-stopped
+
+  tor2:
+    image: dperson/torproxy
+    container_name: tor2
+    networks:
+      - proxy_net_chain
+    restart: unless-stopped
+
+  # Privoxy containers routing via Tor
+  privoxy1:
+    image: lusky3/privoxy:latest
+    container_name: privoxy1
+    volumes:
+      - ./privoxy/tor1.conf:/etc/privoxy/config
+    networks:
+      - proxy_net_chain
+    depends_on:
+      - tor1
+    restart: unless-stopped
+
+  privoxy2:
+    image: lusky3/privoxy:latest
+    container_name: privoxy2
+    volumes:
+      - ./privoxy/tor2.conf:/etc/privoxy/config
+    networks:
+      - proxy_net_chain
+    depends_on:
+      - tor2
+    restart: unless-stopped
+
+  protonvpn:
+    image: genericmale/protonvpn
+    container_name: protonvpn
+    environment:
+      #- OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
+      - VPN_SERVER_FILTER=map(select(.ExitCountry == "DE"))
+      #- OPENVPN_USER=root
+      #- OPENVPN_PASS=kittenity
+      - VPN_RECONNECT=2:00
+      - VPN_SERVER_COUNT=10
+      - CONNECT_TIMEOUT=999
+      - VPN_KILL_SWITCH=1
+      - PROTON_TIER=0
+      - HTTP_PROXY=1
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    devices:
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    secrets:
+      - protonvpn
+    healthcheck:
+      test: ["CMD", "ping", "-c", "1", "1.1.1.1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - proxy_net_chain
+
+secrets:
+  protonvpn:
+    file: ./secrets/protonvpn
+
+networks:
+  proxy_net_chain:
