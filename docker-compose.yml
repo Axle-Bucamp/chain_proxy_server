@@ -6,6 +6,11 @@ services:
     environment:
       - OPENVPN_USER_PASS_FILE=/run/secrets/protonvpn
       - VPN_RECONNECT=2:00
+      - OPENVPN_USER=root
+      - OPENVPN_PASS=kittenity
+      - CONNECT_TIMEOUT=999
+      - VPN_KILL_SWITCH=1
+      - PROTON_TIER=0
       - VPN_SERVER_COUNT=10
     devices:
       - /dev/net/tun
@@ -15,12 +20,7 @@ services:
       - protonvpn
     volumes:
       - /etc/localtime:/etc/localtime:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "https://protonvpn.com"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
+      
   # Final out-proxy through ProtonVPN
   privoxy_out:
     image: vimagick/privoxy
@@ -28,22 +28,16 @@ services:
     network_mode: service:protonvpn
     depends_on:
       protonvpn:
-        condition: service_healthy
+        condition: service_started
 
   # Replicated Tor nodes
   tor:
-    image: dperson/torproxy:armhf
+    image: dperson/torproxy
     deploy:
       mode: replicated
       replicas: 3
     networks:
       - proxy_net
-    environment:
-      - SOCKS_PORT=9100
-      - CONTROL_PORT=9200
-    volumes:
-      - tor-data:/var/lib/tor
-      - ./torrc.template:/etc/tor/torrc:ro
 
   # Replicated Privoxy for Tor → Privoxy routing
   privoxy:
