@@ -1,0 +1,13 @@
+stream {
+    upstream privoxy_pool {
+        least_conn;
+        server 127.0.0.1:8111;
+        server 127.0.0.1:8112;
+        server 127.0.0.1:8113;
+    }
+
+    server {
+        listen 8888;
+        proxy_pass privoxy_pool;
+    }
+}

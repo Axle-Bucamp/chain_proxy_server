@@ -1,0 +1,4 @@
+# privoxy.d/config1
+listen-address  127.0.0.1:8113
+forward-socks5t / 127.0.0.1:9103 .
+
