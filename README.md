@@ -41,16 +41,16 @@ Place each custom Privoxy config file in:
 
 ```bash
 sudo mkdir -p /etc/privoxy/privoxy.d/
-sudo cp privoxy_config_example /etc/privoxy/privoxy.d/config8111
-sudo cp privoxy_config_example /etc/privoxy/privoxy.d/config8112
-sudo cp privoxy_config_example /etc/privoxy/privoxy.d/config8113
+sudo cp pivoxy.d/config1 /etc/privoxy/privoxy.d/config1
+sudo cp ppivoxy.d/config2 /etc/privoxy/privoxy.d/config2
+sudo cp pivoxy.d/config3 /etc/privoxy/privoxy.d/config3
 ```
 
 🔧 Edit each to forward to the correct Tor SOCKS port:
 
-* `config8111` → `forward-socks5t / 127.0.0.1:9051 .`
-* `config8112` → `forward-socks5t / 127.0.0.1:9052 .`
-* `config8113` → `forward-socks5t / 127.0.0.1:9053 .`
+* `config1` → `forward-socks5t / 127.0.0.1:9051 .`
+* `config2` → `forward-socks5t / 127.0.0.1:9052 .`
+* `config3` → `forward-socks5t / 127.0.0.1:9053 .`
 
 #### 2. **NGINX config**
 
@@ -99,9 +99,9 @@ sudo systemctl restart tor
 Run each instance manually:
 
 ```bash
-sudo privoxy --daemon /etc/privoxy/privoxy.d/config8111
-sudo privoxy --daemon /etc/privoxy/privoxy.d/config8112
-sudo privoxy --daemon /etc/privoxy/privoxy.d/config8113
+sudo privoxy --daemon /etc/privoxy/privoxy.d/config1
+sudo privoxy --daemon /etc/privoxy/privoxy.d/config2
+sudo privoxy --daemon /etc/privoxy/privoxy.d/config3
 ```
 
 You can also create `systemd` units if you want them to run persistently (ask if you need help with this).
